@@ -16,6 +16,11 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 
 2. Setup and bootstrap flow.
 - Resolve the repo root by finding `package.json` for `feishu-creator` plus `.env.example`. If the current workspace is already the repo, use it directly.
+- Use the canonical project source directly when the repo is missing:
+  - Repo page: `https://github.com/MrQ-Coding/feishu-creator`
+  - Git clone: `https://github.com/MrQ-Coding/feishu-creator.git`
+  - Zip fallback: `https://github.com/MrQ-Coding/feishu-creator/archive/refs/heads/main.zip`
+- Do not start by searching GitHub, npm, or pip by keyword when these canonical URLs are available. Only search if the user explicitly wants an alternate fork/source, or the canonical source is unreachable.
 - Start with a preflight check: confirm `node` and `npm` are available, prefer `git` for source retrieval and updates, and require Node `>= 20.17.0`.
 - If `node` was just installed, refresh the shell PATH before retrying `node` or `npm`.
 - If the repo is not present yet, prefer `git clone`; only fall back to a GitHub zip when clone is unavailable or blocked.

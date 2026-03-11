@@ -17,6 +17,10 @@
 
 ## 3. Source And Repo Integrity
 
+- Canonical repo page: `https://github.com/MrQ-Coding/feishu-creator`
+- Canonical clone URL: `https://github.com/MrQ-Coding/feishu-creator.git`
+- Canonical zip URL: `https://github.com/MrQ-Coding/feishu-creator/archive/refs/heads/main.zip`
+- Do not start with GitHub / npm / pip keyword search when the canonical URLs above are available
 - Prefer `git clone` when the repo is not present yet
 - Fall back to a GitHub zip only when clone is unavailable or blocked
 - Verify the repo root contains at least:
@@ -27,6 +31,7 @@
 
 - Primary entry point: `scripts/setup_feishu_creator.py`
 - Use it when the user asks to install, initialize, configure, bootstrap, enable, or wire `feishu-creator` or a Feishu helper (`飞书助手`) into an MCP client
+- When bootstrapping from scratch, fetch the source from the canonical repo URL above before running the script
 - Default behavior:
   1. Run preflight checks
   2. Run `npm install`

@@ -1,4 +1,4 @@
 interface:
   display_name: "飞书助手安装与工作流"
   short_description: "面向 feishu-creator MCP 的安装、飞书助手配置与文档操作总工作流助手"
-  default_prompt: "Use $feishu-creator-doc-workflow when the user asks to install feishu-creator, configure a Feishu helper, or continue into Feishu document operations in the same workspace."
+  default_prompt: "Use $feishu-creator-doc-workflow when the user asks to install feishu-creator, configure a Feishu helper, or continue into Feishu document operations in the same workspace. For install/bootstrap, prefer the canonical repo URL https://github.com/MrQ-Coding/feishu-creator instead of keyword-searching GitHub/npm/pip."
