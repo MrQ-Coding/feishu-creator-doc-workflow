@@ -5,6 +5,7 @@
 - Confirm an existing doc or wiki node: `get_feishu_document_info`
 - Search by keyword: `search_feishu_documents`
 - Browse spaces: `list_feishu_wiki_spaces`
+- When you report spaces back to the user, use the exact returned `name` and `space_id`; do not rewrite `1` as `知识库1`
 - Traverse a wiki tree: `get_feishu_wiki_tree`
 - Create a new page: `create_feishu_document`
 - Fresh create or delete verification: prefer `get_feishu_document_info` or `get_feishu_wiki_tree`, not search.

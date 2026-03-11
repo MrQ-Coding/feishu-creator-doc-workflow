@@ -27,6 +27,7 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 - Default to `MCP_MODE=auto` and `stdio`. Do not switch the long-term default to `http` unless the user explicitly wants that.
 - Run [scripts/setup_feishu_creator.py](scripts/setup_feishu_creator.py) for local bootstrap.
 - Let the script do the heavy lifting: install dependencies, prepare `.env` if missing, preserve existing values, build `dist/`, and write MCP config for detected clients.
+- If the shell already has proxy env such as `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY`, preserve them into the MCP child-process `env` and set `NODE_USE_ENV_PROXY=1`.
 - Prefer local or workspace-scoped client config when possible. In the current implementation:
   - Claude-compatible local config: `.mcp.json`
   - Cursor workspace config: `.cursor/mcp.json`
@@ -40,14 +41,17 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 - When the user is explicitly validating install health or the setup path was flaky, run a startup smoke test with `node dist/index.js --stdio` before declaring the install healthy.
 - If credentials exist, continue with `ping` -> `auth_status(fetchToken=true)` -> `get_feishu_document_info`.
 - After writing MCP client config, remind the user to restart Codex or the target MCP client so the new server entry is reloaded.
+- If `auth_status(fetchToken=true)` fails with transport errors such as `fetch failed`, treat proxy/env leakage into the MCP child process as a first-line suspect before blaming Feishu credentials.
 - Treat search delay or permission errors as post-install runtime issues. Do not report dependency install, build, or client wiring as failed unless those steps themselves failed.
 - If the user explicitly asks to configure a specific client, pass a targeted client list to the script instead of touching every detected client.
+- On Windows, when the user needs to verify or demonstrate a Chinese title/body write locally, prefer `<repo>/scripts/callTool.mjs --args-file <utf8-json>` over PowerShell inline JSON pipes.
 
 3. Resolve the Feishu target before content edits.
 - Existing page: start with `get_feishu_document_info`.
 - Unknown page: use `search_feishu_documents`, `list_feishu_wiki_spaces`, or `get_feishu_wiki_tree`.
 - New page: use `create_feishu_document`.
 - In this repo's wiki-first setup, new pages normally need `wikiContext.spaceId`; use `folderToken` only for Drive-folder compatibility.
+- When a wiki space or knowledge base name comes from tool output, quote the exact returned `name` and `space_id`. Do not add prefixes like `知识库`, and do not paraphrase numeric names.
 - Do not use immediate search misses as proof that a fresh create or delete failed.
 
 4. Inspect before mutating.
@@ -79,6 +83,7 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 8. Handle whiteboards conservatively.
 - Recreate the whiteboard at the same position instead of patching the old block in place.
 - If a safe whiteboard workflow is unavailable, stop and tell the user.
+- On Windows PowerShell, do not use inline here-string JSON piped directly into `node` for Chinese content. Use the repo helper `node scripts/callTool.mjs --tool <name> --args-file <utf8-json>` or real MCP client calls instead.
 
 ## References
 

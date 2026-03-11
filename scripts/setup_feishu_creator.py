@@ -17,6 +17,28 @@ DEFAULT_SERVER_NAME = "feishu-creator"
 AUTO_MODE = "auto"
 CLIENTS = ("claude", "cursor", "gemini", "marscode")
 MIN_NODE_VERSION = (20, 17, 0)
+NETWORK_ENV_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
+    "NODE_USE_ENV_PROXY",
+    "NODE_EXTRA_CA_CERTS",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+)
+PROXY_VALUE_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -242,6 +264,18 @@ def ensure_env(repo_root: Path, args: argparse.Namespace) -> Path:
     return env_path
 
 
+def collect_child_process_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+    for key in NETWORK_ENV_KEYS:
+        value = os.environ.get(key)
+        if value:
+            env[key] = value
+    has_proxy = any(env.get(key) for key in PROXY_VALUE_KEYS)
+    if has_proxy and "NODE_USE_ENV_PROXY" not in env:
+        env["NODE_USE_ENV_PROXY"] = "1"
+    return env
+
+
 def is_missing_env_value(value: str | None, placeholders: set[str]) -> bool:
     if value is None:
         return True
@@ -347,6 +381,7 @@ def print_install_report(
     dist_entry: Path,
     tool_summary: dict[str, str | None],
     touched: list[Path],
+    child_env: dict[str, str],
     manual_inputs: list[dict[str, Any]],
     smoke_result: dict[str, str] | None,
     args: argparse.Namespace,
@@ -372,6 +407,12 @@ def print_install_report(
             completed_steps.append("已检查并准备 .env。")
         if not args.skip_config:
             completed_steps.append("已写入或更新 MCP 客户端配置。")
+        if child_env:
+            completed_steps.append(
+                "已为 MCP 子进程透传网络环境变量: "
+                + ", ".join(sorted(child_env.keys()))
+                + "。",
+            )
 
     next_steps: list[str] = []
     if args.dry_run:
@@ -497,13 +538,14 @@ def configure_clients(repo_root: Path, args: argparse.Namespace, dist_entry: Pat
     if args.skip_config:
         return []
 
+    child_env = collect_child_process_env()
     home = Path.home()
     clients = detect_clients(args, home, repo_root)
     touched: list[Path] = []
     server_config = {
         "command": "node",
         "args": [str(dist_entry), "--stdio"],
-        "env": {},
+        "env": child_env,
     }
 
     for client in clients:
@@ -541,11 +583,22 @@ def main() -> int:
         run(["npm", "run", "build"], repo_root, args.dry_run)
 
     touched = configure_clients(repo_root, args, dist_entry)
+    child_env = collect_child_process_env()
     manual_inputs = build_manual_input_items(env_path)
     smoke_result = None
     if args.startup_smoke_test:
         smoke_result = run_startup_smoke_test(repo_root, dist_entry, args.dry_run)
-    print_install_report(repo_root, env_path, dist_entry, tool_summary, touched, manual_inputs, smoke_result, args)
+    print_install_report(
+        repo_root,
+        env_path,
+        dist_entry,
+        tool_summary,
+        touched,
+        child_env,
+        manual_inputs,
+        smoke_result,
+        args,
+    )
 
     return 0
 
