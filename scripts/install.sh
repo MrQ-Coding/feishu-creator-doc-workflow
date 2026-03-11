@@ -53,6 +53,7 @@ main() {
   mkdir -p "$DEST_DIR"
   cp -R "$source_dir"/. "$DEST_DIR"/
   rm -rf "$DEST_DIR/.git"
+  rm -f "$DEST_DIR/README.md"
 
   printf 'Installed %s to %s\n' "$SKILL_NAME" "$DEST_DIR"
   printf 'Restart Codex to pick up the updated skill.\n'
