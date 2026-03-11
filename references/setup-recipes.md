@@ -58,6 +58,13 @@ If the script finishes but the service still cannot authenticate, usually only t
 - `FEISHU_AUTH_TYPE` (default `tenant`)
 - `FEISHU_USER_ACCESS_TOKEN` or `FEISHU_USER_REFRESH_TOKEN` when the user intentionally needs `user` mode
 
+Acquisition hints:
+
+- `FEISHU_APP_ID`: log in to Feishu Open Platform, open the target custom app, then copy the App ID from the app credentials / basic info page
+- `FEISHU_APP_SECRET`: copy the App Secret from the same app credentials page; do not commit it to a public repo
+- `FEISHU_AUTH_TYPE`: keep `tenant` unless the user explicitly needs user OAuth or user-scoped APIs
+- `FEISHU_USER_ACCESS_TOKEN` / `FEISHU_USER_REFRESH_TOKEN`: after MCP config is active, use `get_user_authorize_url` -> browser authorize -> `exchange_user_auth_code`
+
 Do not frame that as a failed install when dependency install, build, and client wiring already succeeded.
 
 ## 7. Verification
@@ -71,7 +78,22 @@ After setup, verify:
 5. If credentials exist, continue with `ping` -> `auth_status(fetchToken=true)` -> `get_feishu_document_info`
 6. Tell the user to restart Codex or the target MCP client after config changes
 
-## 8. Failure Classification
+## 8. Install Result Report
+
+Use a fixed user-facing structure after setup:
+
+1. `安装结果`
+2. `环境`
+3. `仓库位置`
+4. `执行结果`
+5. `生成或更新的文件`
+6. `启动冒烟测试`
+7. `仍需手动填写`
+8. `下一步建议`
+
+When `仍需手动填写` is non-empty, include acquisition steps for each missing field instead of listing bare env names.
+
+## 9. Failure Classification
 
 - Search/index delay after create is not evidence that install failed
 - Permission or auth failures after setup are runtime/config issues, not dependency-install failures

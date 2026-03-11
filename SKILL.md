@@ -34,6 +34,8 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
   - MarsCode global config: `~/.marscode/Studio.mcp.config.json`
 - Minimum expected env fields are `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `FEISHU_AUTH_TYPE`. Default `FEISHU_AUTH_TYPE=tenant` unless the user explicitly needs `user` mode.
 - Do not stop just because Feishu credentials are missing. Finish the install/build/client-config work first, then report exactly which env fields still need user input.
+- Return install/setup results in a fixed report shape: `安装结果` -> `环境` -> `仓库位置` -> `执行结果` -> `生成或更新的文件` -> `启动冒烟测试` -> `仍需手动填写` -> `下一步建议`.
+- When `仍需手动填写` is not empty, include a short acquisition method for each missing field instead of only naming the field.
 - After bootstrap, confirm `dist/index.js` exists and summarize which files were created or updated.
 - When the user is explicitly validating install health or the setup path was flaky, run a startup smoke test with `node dist/index.js --stdio` before declaring the install healthy.
 - If credentials exist, continue with `ping` -> `auth_status(fetchToken=true)` -> `get_feishu_document_info`.
@@ -81,5 +83,6 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 ## References
 
 - Read [references/setup-recipes.md](references/setup-recipes.md) when the user asks to install, initialize, configure, or verify `feishu-creator` MCP locally.
+- Read [references/install-report-template.md](references/install-report-template.md) when you need to present setup/install results in a stable, user-facing format.
 - Read [references/operation-recipes.md](references/operation-recipes.md) for a concise tool-by-task mapping.
 - Read [references/whiteboard-mermaid-patterns.md](references/whiteboard-mermaid-patterns.md) only when the task explicitly involves whiteboard diagrams.
