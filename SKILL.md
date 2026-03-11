@@ -27,7 +27,11 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 - Default to `MCP_MODE=auto` and `stdio`. Do not switch the long-term default to `http` unless the user explicitly wants that.
 - Run [scripts/setup_feishu_creator.py](scripts/setup_feishu_creator.py) for local bootstrap.
 - Let the script do the heavy lifting: install dependencies, prepare `.env` if missing, preserve existing values, build `dist/`, and write MCP config for detected clients.
-- If the shell already has proxy env such as `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY`, preserve them into the MCP child-process `env` and set `NODE_USE_ENV_PROXY=1`.
+- Detect outbound proxy before writing MCP config:
+  - First preserve proxy env already present in the current shell, such as `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY`.
+  - On Windows, if the shell has no concrete proxy env, inspect system proxy settings before deciding the MCP child-process `env`.
+  - Only write proxy env when a concrete proxy address is actually detected, and set `NODE_USE_ENV_PROXY=1`.
+  - If Windows only exposes a PAC / `AutoConfigURL`, do not invent `HTTP_PROXY`; report that manual confirmation of the concrete proxy address is still needed.
 - Prefer local or workspace-scoped client config when possible. In the current implementation:
   - Claude-compatible local config: `.mcp.json`
   - Cursor workspace config: `.cursor/mcp.json`
@@ -36,13 +40,14 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 - Minimum expected env fields are `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `FEISHU_AUTH_TYPE`. Default `FEISHU_AUTH_TYPE=tenant` unless the user explicitly needs `user` mode.
 - Do not stop just because Feishu credentials are missing. Finish the install/build/client-config work first, then report exactly which env fields still need user input.
 - Return install/setup results in a fixed report shape: `安装结果` -> `环境` -> `仓库位置` -> `执行结果` -> `生成或更新的文件` -> `启动冒烟测试` -> `仍需手动填写` -> `下一步建议`.
+- In `执行结果`, explicitly say whether proxy env was detected and written, not detected, or only a PAC / auto-proxy script was found.
 - In `生成或更新的文件`, keep absolute file paths. Do not shorten them to `.env`, `dist/index.js`, or other repo-relative names when reporting back to the user.
 - When `仍需手动填写` is not empty, include a short acquisition method for each missing field instead of only naming the field.
 - After bootstrap, confirm `dist/index.js` exists and summarize which files were created or updated.
 - When the user is explicitly validating install health or the setup path was flaky, run a startup smoke test with `node dist/index.js --stdio` before declaring the install healthy.
 - If credentials exist, continue with `ping` -> `auth_status(fetchToken=true)` -> `get_feishu_document_info`.
 - After writing MCP client config, remind the user to restart Codex or the target MCP client so the new server entry is reloaded.
-- If `auth_status(fetchToken=true)` fails with transport errors such as `fetch failed`, treat proxy/env leakage into the MCP child process as a first-line suspect before blaming Feishu credentials.
+- If `auth_status(fetchToken=true)` fails with transport errors such as `fetch failed` or DNS resolution errors, treat proxy/env leakage into the MCP child process as a first-line suspect before blaming Feishu credentials.
 - Treat search delay or permission errors as post-install runtime issues. Do not report dependency install, build, or client wiring as failed unless those steps themselves failed.
 - If the user explicitly asks to configure a specific client, pass a targeted client list to the script instead of touching every detected client.
 - On Windows, when the user needs to verify or demonstrate a Chinese title/body write locally, prefer `<repo>/scripts/callTool.mjs --args-file <utf8-json>` over PowerShell inline JSON pipes.

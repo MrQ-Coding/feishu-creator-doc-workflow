@@ -46,7 +46,11 @@
 - Cursor workspace config: `<repo>/.cursor/mcp.json`
 - Gemini global config: `~/.gemini/antigravity/mcp_config.json`
 - MarsCode global config: `~/.marscode/Studio.mcp.config.json`
-- If the current shell already has proxy env for outbound access, copy `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` and set `NODE_USE_ENV_PROXY=1` in the MCP child-process `env`
+- Detect proxy before writing MCP child-process `env`:
+  1. Reuse `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` already present in the current shell
+  2. On Windows, if the shell has no concrete proxy env, inspect system proxy settings
+  3. Only write proxy env when a concrete proxy address is detected, and set `NODE_USE_ENV_PROXY=1`
+  4. If Windows only exposes PAC / `AutoConfigURL`, report that manual confirmation of the concrete proxy address is still needed instead of inventing `HTTP_PROXY`
 - On Windows, if you need a local smoke test with Chinese payloads, use `<repo>/scripts/callTool.mjs --args-file <utf8-json>` instead of piping inline JSON through PowerShell
 
 Prefer workspace-local config over global config when the client supports it.
@@ -79,7 +83,8 @@ After setup, verify:
 4. If the user is explicitly validating install health, run `node dist/index.js --stdio` as a startup smoke test
 5. If credentials exist, continue with `ping` -> `auth_status(fetchToken=true)` -> `get_feishu_document_info`
 6. Tell the user to restart Codex or the target MCP client after config changes
-7. If `auth_status(fetchToken=true)` fails with `fetch failed` or other transport errors, inspect whether proxy env reached the MCP child process before changing Feishu credentials
+7. In `执行结果`, say whether proxy env was detected and written, not detected, or only a PAC / auto-proxy script was found
+8. If `auth_status(fetchToken=true)` fails with `fetch failed`, DNS resolution errors, or other transport errors, inspect whether proxy env reached the MCP child process before changing Feishu credentials
 
 ## 8. Install Result Report
 
@@ -102,5 +107,6 @@ For `生成或更新的文件`, output absolute file paths so the client UI can 
 - Search/index delay after create is not evidence that install failed
 - Permission or auth failures after setup are runtime/config issues, not dependency-install failures
 - `fetch failed` during token retrieval is often transport/proxy leakage into the MCP child process, not a wrong `FEISHU_APP_ID` / `FEISHU_APP_SECRET`
+- DNS failures such as `Could not resolve host` usually point to network/proxy propagation problems before they point to wrong Feishu credentials
 - Report install/build/client-config success or failure separately from Feishu-side auth and indexing outcomes
 - On Windows PowerShell, for Chinese or other non-ASCII payloads, prefer `node scripts/callTool.mjs --tool <name> --args-file <utf8-json>` so the JSON is read as UTF-8 instead of going through console pipe encoding

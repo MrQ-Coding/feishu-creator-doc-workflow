@@ -32,6 +32,7 @@ Use this template after install, bootstrap, repair, or verification work for `fe
 - 已完成 npm run build。
 - 已检查并准备 .env。
 - 已写入或更新 MCP 客户端配置。
+- 已检测到代理并写入 MCP 子进程 env（来源: current shell env / Windows Internet Settings）。
 
 生成或更新的文件
 - <repo_root>/.env
@@ -66,5 +67,6 @@ Use this template after install, bootstrap, repair, or verification work for `fe
 - If no manual env fields are missing, explicitly say `当前未发现必须补填的字段`
 - If startup smoke test was not run, say so directly and tell the user how to run `node dist/index.js --stdio`
 - Do not collapse install/build/client-config success into Feishu-side auth success; report them separately
+- In `执行结果`, explicitly say whether proxy env was written, not needed, or blocked by PAC-only auto-proxy detection
 - For Windows local verification with Chinese payloads, prefer `node scripts/callTool.mjs --tool <name> --args-file <utf8-json>` so the JSON stays UTF-8 end-to-end
 - In `生成或更新的文件`, keep absolute paths instead of shortening them to repo-relative names; otherwise the UI may not open them correctly

@@ -39,6 +39,7 @@ PROXY_VALUE_KEYS = (
     "https_proxy",
     "all_proxy",
 )
+LOCAL_NO_PROXY_VALUES = ("localhost", "127.0.0.1", "::1")
 
 
 def parse_args() -> argparse.Namespace:
@@ -264,18 +265,274 @@ def ensure_env(repo_root: Path, args: argparse.Namespace) -> Path:
     return env_path
 
 
-def collect_child_process_env() -> dict[str, str]:
+def collect_current_network_env() -> dict[str, str]:
     env: dict[str, str] = {}
     for key in NETWORK_ENV_KEYS:
         value = os.environ.get(key)
         if value:
             env[key] = value
-    has_proxy = any(env.get(key) for key in PROXY_VALUE_KEYS)
-    if has_proxy and "NODE_USE_ENV_PROXY" not in env:
+    return env
+
+
+def has_proxy_values(env: dict[str, str]) -> bool:
+    return any(env.get(key) for key in PROXY_VALUE_KEYS)
+
+
+def ensure_node_uses_env_proxy(env: dict[str, str]) -> dict[str, str]:
+    if has_proxy_values(env) and "NODE_USE_ENV_PROXY" not in env:
         env["NODE_USE_ENV_PROXY"] = "1"
     return env
 
 
+def normalize_proxy_url(value: str, default_scheme: str = "http") -> str:
+    normalized = value.strip().strip('"').strip("'")
+    if not normalized:
+        return ""
+    if "://" in normalized:
+        return normalized
+    return f"{default_scheme}://{normalized}"
+
+
+def normalize_no_proxy(value: str) -> str:
+    tokens: list[str] = []
+    for raw in value.replace(";", ",").split(","):
+        token = raw.strip()
+        if not token or token == "(none)":
+            continue
+        if token.lower() == "<local>":
+            for local_value in LOCAL_NO_PROXY_VALUES:
+                if local_value not in tokens:
+                    tokens.append(local_value)
+            continue
+        if token not in tokens:
+            tokens.append(token)
+    return ",".join(tokens)
+
+
+def parse_windows_proxy_server(value: str) -> dict[str, str]:
+    raw = value.strip().strip('"').strip("'")
+    if not raw:
+        return {}
+
+    env: dict[str, str] = {}
+    if "=" not in raw:
+        proxy_url = normalize_proxy_url(raw, default_scheme="http")
+        if proxy_url:
+            env["HTTP_PROXY"] = proxy_url
+            env["HTTPS_PROXY"] = proxy_url
+        return env
+
+    for part in raw.split(";"):
+        item = part.strip()
+        if not item or "=" not in item:
+            continue
+        key, proxy_value = item.split("=", 1)
+        proxy_key = key.strip().lower()
+        normalized_value = proxy_value.strip()
+        if not normalized_value:
+            continue
+        if proxy_key == "http":
+            env["HTTP_PROXY"] = normalize_proxy_url(normalized_value, default_scheme="http")
+        elif proxy_key == "https":
+            env["HTTPS_PROXY"] = normalize_proxy_url(normalized_value, default_scheme="http")
+        elif proxy_key in {"socks", "socks4"}:
+            env["ALL_PROXY"] = normalize_proxy_url(normalized_value, default_scheme="socks")
+        elif proxy_key == "socks5":
+            env["ALL_PROXY"] = normalize_proxy_url(normalized_value, default_scheme="socks5")
+
+    if env.get("HTTP_PROXY") and "HTTPS_PROXY" not in env:
+        env["HTTPS_PROXY"] = env["HTTP_PROXY"]
+    if env.get("HTTPS_PROXY") and "HTTP_PROXY" not in env:
+        env["HTTP_PROXY"] = env["HTTPS_PROXY"]
+    return env
+
+
+def merge_missing_env(base: dict[str, str], updates: dict[str, str]) -> dict[str, str]:
+    merged = dict(base)
+    for key, value in updates.items():
+        if value and not merged.get(key):
+            merged[key] = value
+    return merged
+
+
+def detect_windows_internet_settings_proxy() -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "source": "",
+        "env": {},
+        "notes": [],
+        "pac_only": False,
+    }
+    if os.name != "nt":
+        return result
+
+    try:
+        import winreg
+    except ImportError:
+        return result
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+        ) as key:
+            try:
+                proxy_enable = int(winreg.QueryValueEx(key, "ProxyEnable")[0])
+            except OSError:
+                proxy_enable = 0
+            try:
+                proxy_server = str(winreg.QueryValueEx(key, "ProxyServer")[0]).strip()
+            except OSError:
+                proxy_server = ""
+            try:
+                proxy_override = str(winreg.QueryValueEx(key, "ProxyOverride")[0]).strip()
+            except OSError:
+                proxy_override = ""
+            try:
+                auto_config_url = str(winreg.QueryValueEx(key, "AutoConfigURL")[0]).strip()
+            except OSError:
+                auto_config_url = ""
+    except OSError:
+        return result
+
+    if proxy_enable and proxy_server:
+        env = parse_windows_proxy_server(proxy_server)
+        no_proxy = normalize_no_proxy(proxy_override)
+        if no_proxy:
+            env["NO_PROXY"] = no_proxy
+        if has_proxy_values(env):
+            result["source"] = "Windows Internet Settings"
+            result["env"] = ensure_node_uses_env_proxy(env)
+
+    if auto_config_url:
+        if result["env"]:
+            result["notes"].append(
+                f"另外检测到 Windows 自动代理脚本 (PAC): {auto_config_url}。",
+            )
+        else:
+            result["pac_only"] = True
+            result["notes"].append(
+                "检测到 Windows 自动代理脚本 (PAC)，但它不会自动转换成 HTTP_PROXY/HTTPS_PROXY；"
+                "如需 MCP 子进程走代理，请补充具体代理地址。",
+            )
+    return result
+
+
+def detect_windows_winhttp_proxy() -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "source": "",
+        "env": {},
+        "notes": [],
+        "pac_only": False,
+    }
+    if os.name != "nt":
+        return result
+
+    try:
+        completed = subprocess.run(
+            ["netsh", "winhttp", "show", "proxy"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return result
+
+    output = (completed.stdout or "").strip()
+    if not output:
+        return result
+
+    lowered = output.lower()
+    if (
+        ("direct access" in lowered and "proxy" in lowered)
+        or "直接访问" in output
+        or "no proxy server" in lowered
+    ):
+        return result
+
+    values: list[str] = []
+    for line in output.splitlines():
+        if ":" not in line:
+            continue
+        _, raw_value = line.split(":", 1)
+        value = raw_value.strip()
+        if not value:
+            continue
+        values.append(value)
+
+    proxy_server = ""
+    bypass_list = ""
+    for value in values:
+        lowered_value = value.lower()
+        if lowered_value in {"(none)", "none"}:
+            if not bypass_list:
+                bypass_list = value
+            continue
+        if "direct access" in lowered_value or "直接访问" in value:
+            return result
+        if not proxy_server:
+            proxy_server = value
+            continue
+        if not bypass_list:
+            bypass_list = value
+
+    env = parse_windows_proxy_server(proxy_server)
+    no_proxy = normalize_no_proxy(bypass_list)
+    if no_proxy:
+        env["NO_PROXY"] = no_proxy
+    if has_proxy_values(env):
+        result["source"] = "Windows WinHTTP"
+        result["env"] = ensure_node_uses_env_proxy(env)
+    return result
+
+
+def collect_child_process_env_info() -> dict[str, Any]:
+    env = ensure_node_uses_env_proxy(collect_current_network_env())
+    if has_proxy_values(env):
+        return {
+            "env": env,
+            "status": "proxy_configured",
+            "source": "current shell env",
+            "notes": [],
+        }
+
+    notes: list[str] = []
+    if os.name == "nt":
+        internet_settings = detect_windows_internet_settings_proxy()
+        notes.extend(internet_settings["notes"])
+        if internet_settings["env"]:
+            return {
+                "env": merge_missing_env(env, internet_settings["env"]),
+                "status": "proxy_configured",
+                "source": internet_settings["source"],
+                "notes": notes,
+            }
+
+        winhttp = detect_windows_winhttp_proxy()
+        notes.extend(winhttp["notes"])
+        if winhttp["env"]:
+            return {
+                "env": merge_missing_env(env, winhttp["env"]),
+                "status": "proxy_configured",
+                "source": winhttp["source"],
+                "notes": notes,
+            }
+
+        if internet_settings["pac_only"] or winhttp["pac_only"]:
+            return {
+                "env": env,
+                "status": "pac_only",
+                "source": "",
+                "notes": notes,
+            }
+
+    return {
+        "env": env,
+        "status": "none",
+        "source": "",
+        "notes": notes,
+    }
 def is_missing_env_value(value: str | None, placeholders: set[str]) -> bool:
     if value is None:
         return True
@@ -381,11 +638,12 @@ def print_install_report(
     dist_entry: Path,
     tool_summary: dict[str, str | None],
     touched: list[Path],
-    child_env: dict[str, str],
+    child_env_info: dict[str, Any],
     manual_inputs: list[dict[str, Any]],
     smoke_result: dict[str, str] | None,
     args: argparse.Namespace,
 ) -> None:
+    child_env = child_env_info["env"]
     generated_files = [env_path, *touched, dist_entry]
     unique_files: list[Path] = []
     seen: set[Path] = set()
@@ -407,12 +665,29 @@ def print_install_report(
             completed_steps.append("已检查并准备 .env。")
         if not args.skip_config:
             completed_steps.append("已写入或更新 MCP 客户端配置。")
-        if child_env:
-            completed_steps.append(
-                "已为 MCP 子进程透传网络环境变量: "
-                + ", ".join(sorted(child_env.keys()))
-                + "。",
-            )
+
+    if child_env_info["status"] == "proxy_configured":
+        completed_steps.append(
+            ("已检测到代理并写入 MCP 子进程 env" if not args.dry_run else "已检测到代理；正式执行时将写入 MCP 子进程 env")
+            + (f"（来源: {child_env_info['source']}）" if child_env_info["source"] else "")
+            + ": "
+            + ", ".join(sorted(child_env.keys()))
+            + "。",
+        )
+    elif child_env_info["status"] == "pac_only":
+        completed_steps.append(
+            "检测到系统自动代理脚本 (PAC)，但未自动写入 HTTP_PROXY/HTTPS_PROXY。",
+        )
+    elif child_env:
+        completed_steps.append(
+            "未检测到具体代理地址，但已保留其他网络相关环境变量: "
+            + ", ".join(sorted(child_env.keys()))
+            + "。",
+        )
+    else:
+        completed_steps.append("未检测到具体代理地址，因此 MCP 配置未额外写入代理 env。")
+    for note in child_env_info["notes"]:
+        completed_steps.append(note)
 
     next_steps: list[str] = []
     if args.dry_run:
@@ -426,6 +701,10 @@ def print_install_report(
             next_steps.append("先把上面仍需手动填写的字段补进 .env。")
         if touched:
             next_steps.append("重启 Codex 或目标 MCP 客户端，让新配置生效。")
+        if child_env_info["status"] == "pac_only":
+            next_steps.append(
+                "如果当前网络依赖系统自动代理脚本 (PAC)，请手动确认具体代理地址，再写入 shell 环境或 .mcp.json 后重试 auth_status(fetchToken=true)。",
+            )
         if not manual_inputs:
             next_steps.append("继续做连通性验证：ping -> auth_status(fetchToken=true) -> get_feishu_document_info。")
         elif smoke_result is None:
@@ -534,11 +813,15 @@ def detect_clients(args: argparse.Namespace, home: Path, repo_root: Path) -> lis
     return detected
 
 
-def configure_clients(repo_root: Path, args: argparse.Namespace, dist_entry: Path) -> list[Path]:
+def configure_clients(
+    repo_root: Path,
+    args: argparse.Namespace,
+    dist_entry: Path,
+    child_env: dict[str, str],
+) -> list[Path]:
     if args.skip_config:
         return []
 
-    child_env = collect_child_process_env()
     home = Path.home()
     clients = detect_clients(args, home, repo_root)
     touched: list[Path] = []
@@ -582,8 +865,8 @@ def main() -> int:
     if not args.skip_build:
         run(["npm", "run", "build"], repo_root, args.dry_run)
 
-    touched = configure_clients(repo_root, args, dist_entry)
-    child_env = collect_child_process_env()
+    child_env_info = collect_child_process_env_info()
+    touched = configure_clients(repo_root, args, dist_entry, child_env_info["env"])
     manual_inputs = build_manual_input_items(env_path)
     smoke_result = None
     if args.startup_smoke_test:
@@ -594,7 +877,7 @@ def main() -> int:
         dist_entry,
         tool_summary,
         touched,
-        child_env,
+        child_env_info,
         manual_inputs,
         smoke_result,
         args,
