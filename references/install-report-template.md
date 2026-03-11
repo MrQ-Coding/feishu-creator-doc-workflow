@@ -67,3 +67,4 @@ Use this template after install, bootstrap, repair, or verification work for `fe
 - If startup smoke test was not run, say so directly and tell the user how to run `node dist/index.js --stdio`
 - Do not collapse install/build/client-config success into Feishu-side auth success; report them separately
 - For Windows local verification with Chinese payloads, prefer `node scripts/callTool.mjs --tool <name> --args-file <utf8-json>` so the JSON stays UTF-8 end-to-end
+- In `生成或更新的文件`, keep absolute paths instead of shortening them to repo-relative names; otherwise the UI may not open them correctly

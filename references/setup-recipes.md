@@ -95,6 +95,7 @@ Use a fixed user-facing structure after setup:
 8. `下一步建议`
 
 When `仍需手动填写` is non-empty, include acquisition steps for each missing field instead of listing bare env names.
+For `生成或更新的文件`, output absolute file paths so the client UI can open them reliably.
 
 ## 9. Failure Classification
 

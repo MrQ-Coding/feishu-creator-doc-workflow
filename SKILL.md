@@ -36,6 +36,7 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 - Minimum expected env fields are `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `FEISHU_AUTH_TYPE`. Default `FEISHU_AUTH_TYPE=tenant` unless the user explicitly needs `user` mode.
 - Do not stop just because Feishu credentials are missing. Finish the install/build/client-config work first, then report exactly which env fields still need user input.
 - Return install/setup results in a fixed report shape: `安装结果` -> `环境` -> `仓库位置` -> `执行结果` -> `生成或更新的文件` -> `启动冒烟测试` -> `仍需手动填写` -> `下一步建议`.
+- In `生成或更新的文件`, keep absolute file paths. Do not shorten them to `.env`, `dist/index.js`, or other repo-relative names when reporting back to the user.
 - When `仍需手动填写` is not empty, include a short acquisition method for each missing field instead of only naming the field.
 - After bootstrap, confirm `dist/index.js` exists and summarize which files were created or updated.
 - When the user is explicitly validating install health or the setup path was flaky, run a startup smoke test with `node dist/index.js --stdio` before declaring the install healthy.
