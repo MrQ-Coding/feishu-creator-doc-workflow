@@ -1,0 +1,4 @@
+interface:
+  display_name: "飞书文档工作流助手"
+  short_description: "面向 feishu-creator MCP 的飞书文档创建与更新工作流助手"
+  default_prompt: "Use $feishu-creator-doc-workflow to choose the right feishu-creator operations for creating or updating a Feishu doc, then verify the edit landed in the intended place."
