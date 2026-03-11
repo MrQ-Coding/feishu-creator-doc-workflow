@@ -58,6 +58,7 @@ Use this template after install, bootstrap, repair, or verification work for `fe
 1. 先把上面仍需手动填写的字段补进 .env。
 2. 重启 Codex 或目标 MCP 客户端，让新配置生效。
 3. 再做连通性验证：ping -> auth_status(fetchToken=true) -> get_feishu_document_info。
+4. 如果你在 Windows 上要验证中文写入，优先用 `node scripts/callTool.mjs --tool <name> --args-file <utf8-json>`，不要把带中文的内联 JSON 直接管道给 `node`。
 ```
 
 ## Notes
@@ -65,3 +66,4 @@ Use this template after install, bootstrap, repair, or verification work for `fe
 - If no manual env fields are missing, explicitly say `当前未发现必须补填的字段`
 - If startup smoke test was not run, say so directly and tell the user how to run `node dist/index.js --stdio`
 - Do not collapse install/build/client-config success into Feishu-side auth success; report them separately
+- For Windows local verification with Chinese payloads, prefer `node scripts/callTool.mjs --tool <name> --args-file <utf8-json>` so the JSON stays UTF-8 end-to-end
