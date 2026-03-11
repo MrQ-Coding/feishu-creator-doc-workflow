@@ -15,6 +15,7 @@ from typing import Any
 DEFAULT_SERVER_NAME = "feishu-creator"
 AUTO_MODE = "auto"
 CLIENTS = ("claude", "cursor", "gemini", "marscode")
+MIN_NODE_VERSION = (20, 17, 0)
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,6 +63,50 @@ def run(cmd: list[str], cwd: Path, dry_run: bool) -> None:
     if dry_run:
         return
     subprocess.run(cmd, cwd=str(cwd), check=True)
+
+
+def require_tool(name: str, required: bool = True) -> str | None:
+    resolved = shutil.which(name)
+    if resolved:
+        return resolved
+    if required:
+        raise SystemExit(
+            f"{name} is required. Install Node.js >= 20.17.0 (which provides node/npm) "
+            "and reopen the shell so PATH is refreshed before retrying.",
+        )
+    return None
+
+
+def parse_node_version(text: str) -> tuple[int, int, int]:
+    raw = text.strip().lstrip("v")
+    parts = raw.split(".")
+    if len(parts) < 3:
+        raise SystemExit(f"Unexpected Node.js version output: {text!r}")
+    return tuple(int(part) for part in parts[:3])  # type: ignore[return-value]
+
+
+def preflight(repo_root: Path, dry_run: bool) -> None:
+    node_path = require_tool("node", required=True)
+    npm_path = require_tool("npm", required=True)
+    git_path = require_tool("git", required=False)
+
+    print("Preflight summary")
+    print(f"- node: {node_path}")
+    print(f"- npm: {npm_path}")
+    print(f"- git: {git_path or 'not found (ok if repo source already exists)'}")
+
+    if dry_run:
+        return
+
+    version_output = subprocess.check_output(["node", "--version"], cwd=str(repo_root), text=True)
+    node_version = parse_node_version(version_output)
+    print(f"- node version: {version_output.strip()}")
+    if node_version < MIN_NODE_VERSION:
+        required = ".".join(str(part) for part in MIN_NODE_VERSION)
+        raise SystemExit(
+            f"Node.js >= {required} is required, but found {version_output.strip()}. "
+            "Install a newer Node.js and reopen the shell before retrying.",
+        )
 
 
 def read_text(path: Path) -> str:
@@ -256,6 +301,7 @@ def main() -> int:
     dist_entry = repo_root / "dist" / "index.js"
 
     print(f"repo_root={repo_root}")
+    preflight(repo_root, args.dry_run)
 
     if not args.skip_install:
         run(["npm", "install"], repo_root, args.dry_run)

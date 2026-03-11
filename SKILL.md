@@ -16,6 +16,9 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
 
 2. Setup and bootstrap flow.
 - Resolve the repo root by finding `package.json` for `feishu-creator` plus `.env.example`. If the current workspace is already the repo, use it directly.
+- Start with a preflight check: confirm `node` and `npm` are available, prefer `git` for source retrieval and updates, and require Node `>= 20.17.0`.
+- If `node` was just installed, refresh the shell PATH before retrying `node` or `npm`.
+- If the repo is not present yet, prefer `git clone`; only fall back to a GitHub zip when clone is unavailable or blocked.
 - Default to `MCP_MODE=auto` and `stdio`. Do not switch the long-term default to `http` unless the user explicitly wants that.
 - Run [scripts/setup_feishu_creator.py](scripts/setup_feishu_creator.py) for local bootstrap.
 - Let the script do the heavy lifting: install dependencies, prepare `.env` if missing, preserve existing values, build `dist/`, and write MCP config for detected clients.
@@ -24,8 +27,13 @@ Use this skill when the task touches the `feishu-creator` lifecycle end-to-end: 
   - Cursor workspace config: `.cursor/mcp.json`
   - Gemini global config: `~/.gemini/antigravity/mcp_config.json`
   - MarsCode global config: `~/.marscode/Studio.mcp.config.json`
+- Minimum expected env fields are `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `FEISHU_AUTH_TYPE`. Default `FEISHU_AUTH_TYPE=tenant` unless the user explicitly needs `user` mode.
 - Do not stop just because Feishu credentials are missing. Finish the install/build/client-config work first, then report exactly which env fields still need user input.
 - After bootstrap, confirm `dist/index.js` exists and summarize which files were created or updated.
+- When the user is explicitly validating install health or the setup path was flaky, run a startup smoke test with `node dist/index.js --stdio` before declaring the install healthy.
+- If credentials exist, continue with `ping` -> `auth_status(fetchToken=true)` -> `get_feishu_document_info`.
+- After writing MCP client config, remind the user to restart Codex or the target MCP client so the new server entry is reloaded.
+- Treat search delay or permission errors as post-install runtime issues. Do not report dependency install, build, or client wiring as failed unless those steps themselves failed.
 - If the user explicitly asks to configure a specific client, pass a targeted client list to the script instead of touching every detected client.
 
 3. Resolve the Feishu target before content edits.
