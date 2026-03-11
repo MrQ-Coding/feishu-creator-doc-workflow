@@ -103,10 +103,11 @@ def require_tool(name: str, required: bool = True) -> str | None:
 
 
 def get_tool_version(name: str) -> str | None:
-    if not shutil.which(name):
+    resolved = shutil.which(name)
+    if not resolved:
         return None
     try:
-        output = subprocess.check_output([name, "--version"], text=True, stderr=subprocess.STDOUT)
+        output = subprocess.check_output([resolved, "--version"], text=True, stderr=subprocess.STDOUT)
     except (OSError, subprocess.CalledProcessError):
         return None
     for line in output.splitlines():
@@ -142,7 +143,7 @@ def preflight(repo_root: Path, dry_run: bool) -> dict[str, str | None]:
     print(f"- npm: {npm_path}")
     print(f"- git: {git_path or 'not found (ok if repo source already exists)'}")
 
-    version_output = subprocess.check_output(["node", "--version"], cwd=str(repo_root), text=True)
+    version_output = subprocess.check_output([node_path, "--version"], cwd=str(repo_root), text=True)
     node_version = parse_node_version(version_output)
     summary["node_version"] = version_output.strip()
     summary["npm_version"] = get_tool_version("npm")
@@ -591,13 +592,13 @@ def build_manual_input_items(env_path: Path) -> list[dict[str, Any]]:
     return items
 
 
-def run_startup_smoke_test(repo_root: Path, dist_entry: Path, dry_run: bool) -> dict[str, str]:
+def run_startup_smoke_test(repo_root: Path, dist_entry: Path, node_path: str, dry_run: bool) -> dict[str, str]:
     if dry_run:
         return {"status": "未执行", "detail": "dry-run 模式下跳过启动冒烟测试。"}
     if not dist_entry.exists():
         return {"status": "失败", "detail": "dist/index.js 不存在，无法执行启动冒烟测试。"}
 
-    cmd = ["node", str(dist_entry), "--stdio"]
+    cmd = [node_path, str(dist_entry), "--stdio"]
     print(f"+ {' '.join(cmd)}")
     process = subprocess.Popen(
         cmd,
@@ -858,19 +859,19 @@ def main() -> int:
     tool_summary = preflight(repo_root, args.dry_run)
 
     if not args.skip_install:
-        run(["npm", "install"], repo_root, args.dry_run)
+        run([str(tool_summary["npm_path"]), "install"], repo_root, args.dry_run)
 
     env_path = ensure_env(repo_root, args)
 
     if not args.skip_build:
-        run(["npm", "run", "build"], repo_root, args.dry_run)
+        run([str(tool_summary["npm_path"]), "run", "build"], repo_root, args.dry_run)
 
     child_env_info = collect_child_process_env_info()
     touched = configure_clients(repo_root, args, dist_entry, child_env_info["env"])
     manual_inputs = build_manual_input_items(env_path)
     smoke_result = None
     if args.startup_smoke_test:
-        smoke_result = run_startup_smoke_test(repo_root, dist_entry, args.dry_run)
+        smoke_result = run_startup_smoke_test(repo_root, dist_entry, str(tool_summary["node_path"]), args.dry_run)
     print_install_report(
         repo_root,
         env_path,
